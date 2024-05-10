@@ -1,0 +1,1 @@
+D:\Project\rwkv.cpp\ggml.dir\Release\ggml.lib

@@ -1,0 +1,16 @@
+D:/Project/rwkv.cpp/CMakeFiles/ggml.dir
+D:/Project/rwkv.cpp/CMakeFiles/rwkv.dir
+D:/Project/rwkv.cpp/CMakeFiles/RUN_TESTS.dir
+D:/Project/rwkv.cpp/CMakeFiles/ALL_BUILD.dir
+D:/Project/rwkv.cpp/CMakeFiles/ZERO_CHECK.dir
+D:/Project/rwkv.cpp/tests/CMakeFiles/test_ggml_basics.dir
+D:/Project/rwkv.cpp/tests/CMakeFiles/test_quantized_matmul_on_gpu.dir
+D:/Project/rwkv.cpp/tests/CMakeFiles/test_tiny_rwkv.dir
+D:/Project/rwkv.cpp/tests/CMakeFiles/test_quantization_format_compatibility.dir
+D:/Project/rwkv.cpp/tests/CMakeFiles/test_logit_calculation_skipping.dir
+D:/Project/rwkv.cpp/tests/CMakeFiles/test_eval_sequence_in_chunks.dir
+D:/Project/rwkv.cpp/tests/CMakeFiles/test_context_cloning.dir
+D:/Project/rwkv.cpp/tests/CMakeFiles/RUN_TESTS.dir
+D:/Project/rwkv.cpp/extras/CMakeFiles/rwkv_cpu_info.dir
+D:/Project/rwkv.cpp/extras/CMakeFiles/rwkv_quantize.dir
+D:/Project/rwkv.cpp/extras/CMakeFiles/RUN_TESTS.dir

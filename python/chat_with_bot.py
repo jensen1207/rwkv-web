@@ -21,12 +21,12 @@ LANGUAGE: str = 'English'
 # Chat: chat prompt (need a large model for adequate quality, 7B+).
 PROMPT_TYPE: str = 'QA'
 
-MAX_GENERATION_LENGTH: int = 250
+MAX_GENERATION_LENGTH: int = 1000
 
 # Sampling temperature. It could be a good idea to increase temperature when top_p is low.
-TEMPERATURE: float = 0.8
+TEMPERATURE: float = 2
 # For better Q&A accuracy and less diversity, reduce top_p (to 0.5, 0.2, 0.1 etc.)
-TOP_P: float = 0.5
+TOP_P: float = 0.6
 # Penalize new tokens based on whether they appear in the text so far, increasing the model's likelihood to talk about new topics.
 PRESENCE_PENALTY: float = 0.2
 # Penalize new tokens based on their existing frequency in the text so far, decreasing the model's likelihood to repeat the same line verbatim.
@@ -39,7 +39,7 @@ END_OF_TEXT_TOKEN: int = 0
 # =================================================================================================
 
 parser = argparse.ArgumentParser(description='Provide terminal-based chat interface for RWKV model')
-parser.add_argument('model_path', help='Path to RWKV model in ggml format')
+# parser.add_argument('model_path', help='Path to RWKV model in ggml format')
 add_tokenizer_argument(parser)
 args = parser.parse_args()
 
@@ -53,19 +53,102 @@ with open(script_dir / 'prompt' / f'{LANGUAGE}-{PROMPT_TYPE}.json', 'r', encodin
 if init_prompt == '':
     raise ValueError('Prompt must not be empty')
 
-library = rwkv_cpp_shared_library.load_rwkv_shared_library()
-print(f'System info: {library.rwkv_get_system_info_string()}')
+# library = rwkv_cpp_shared_library.load_rwkv_shared_library()
+# print(f'System info: {library.rwkv_get_system_info_string()}')
 
-print('Loading RWKV model')
-model = rwkv_cpp_model.RWKVModel(library, args.model_path)
+# print('Loading RWKV model')
+# model = rwkv_cpp_model.RWKVModel(library, args.model_path)
 
-tokenizer_decode, tokenizer_encode = get_tokenizer(args.tokenizer, model.n_vocab)
+# tokenizer_decode, tokenizer_encode = get_tokenizer(args.tokenizer, model.n_vocab)
 
 # =================================================================================================
 
 processed_tokens: List[int] = []
 logits: Optional[rwkv_cpp_model.NumpyArrayOrPyTorchTensor] = None
 state: Optional[rwkv_cpp_model.NumpyArrayOrPyTorchTensor] = None
+
+def start_chat_bot(path):
+    global library, model, tokenizer_decode, tokenizer_encode
+    
+    library = rwkv_cpp_shared_library.load_rwkv_shared_library()
+    print(f'System info: {library.rwkv_get_system_info_string()}')
+
+    print('Loading RWKV model')
+    model = rwkv_cpp_model.RWKVModel(library, path)
+
+    tokenizer_decode, tokenizer_encode = get_tokenizer(args.tokenizer, model.n_vocab)
+
+    processing_start: float = time.time()
+
+    prompt_tokens = tokenizer_encode(init_prompt)
+    prompt_token_count = len(prompt_tokens)
+    print(f'Processing {prompt_token_count} prompt tokens, may take a while')
+
+    process_tokens(split_last_end_of_line(prompt_tokens))
+
+    processing_duration: float = time.time() - processing_start
+
+    print(f'Processed in {int(processing_duration)} s, {int(processing_duration / prompt_token_count * 1000)} ms per token')
+
+    save_thread_state('chat_init')
+    save_thread_state('chat')
+
+    print(f'\nChat initialized! Your name is {user}. Write something and press Enter. Use \\n to add line breaks to your message.')
+
+    return f'你好,很高兴和你聊天!'
+
+def get_bot_response(user_input,temp,top_p,penalty,fre_pena,max_len):
+    load_thread_state('chat')
+    new = f'{user}{separator} {user_input}\n\n{bot}{separator}'
+    process_tokens(tokenizer_encode(new), new_line_logit_bias=-999999999)
+    save_thread_state('chat_pre')
+
+    start_index = len(processed_tokens)
+
+    accumulated_tokens: List[int] = []
+    token_counts: Dict[int, int] = {}
+    
+    temperature: float = temp
+    top_p: float = top_p
+    
+    thread = 'chat'
+
+    for i in range(max_len):
+        for n in token_counts:
+            logits[n] -= penalty + token_counts[n] * fre_pena
+
+        token: int = sampling.sample_logits(logits, temperature, top_p)
+
+        if token == END_OF_TEXT_TOKEN:
+            print()
+            break
+
+        if token not in token_counts:
+            token_counts[token] = 1
+        else:
+            token_counts[token] += 1
+
+        process_tokens([token])
+
+        # Avoid UTF-8 display issues
+        accumulated_tokens += [token]
+
+        decoded: str = tokenizer_decode(accumulated_tokens)
+
+        if '\uFFFD' not in decoded:
+            print(decoded, end='', flush=True)
+
+            accumulated_tokens = []
+
+        if thread == 'chat':
+            if '\n\n' in tokenizer_decode(processed_tokens[start_index:]):
+                break
+
+        if i == MAX_GENERATION_LENGTH - 1:
+            print()
+
+    save_thread_state('chat')
+    return tokenizer_decode(processed_tokens[start_index:])
 
 def process_tokens(_tokens: List[int], new_line_logit_bias: float = 0.0) -> None:
     global processed_tokens, logits, state
@@ -104,175 +187,159 @@ def split_last_end_of_line(tokens: List[int]) -> List[int]:
 
 # =================================================================================================
 
-processing_start: float = time.time()
 
-prompt_tokens = tokenizer_encode(init_prompt)
-prompt_token_count = len(prompt_tokens)
-print(f'Processing {prompt_token_count} prompt tokens, may take a while')
+# while True:
+    # # Read user input
+    # user_input: str = input(f'> {user}{separator} ')
+    # msg: str = user_input.replace('\\n', '\n').strip()
 
-process_tokens(split_last_end_of_line(prompt_tokens))
+    # temperature: float = TEMPERATURE
+    # top_p: float = TOP_P
 
-processing_duration: float = time.time() - processing_start
+    # if '-temp=' in msg:
+        # temperature = float(msg.split('-temp=')[1].split(' ')[0])
 
-print(f'Processed in {int(processing_duration)} s, {int(processing_duration / prompt_token_count * 1000)} ms per token')
+        # msg = msg.replace('-temp='+f'{temperature:g}', '')
 
-save_thread_state('chat_init')
-save_thread_state('chat')
+        # if temperature <= 0.2:
+            # temperature = 0.2
 
-print(f'\nChat initialized! Your name is {user}. Write something and press Enter. Use \\n to add line breaks to your message.')
+        # if temperature >= 5:
+            # temperature = 5
 
-while True:
-    # Read user input
-    user_input: str = input(f'> {user}{separator} ')
-    msg: str = user_input.replace('\\n', '\n').strip()
+    # if '-top_p=' in msg:
+        # top_p = float(msg.split('-top_p=')[1].split(' ')[0])
 
-    temperature: float = TEMPERATURE
-    top_p: float = TOP_P
+        # msg = msg.replace('-top_p='+f'{top_p:g}', '')
 
-    if '-temp=' in msg:
-        temperature = float(msg.split('-temp=')[1].split(' ')[0])
+        # if top_p <= 0:
+            # top_p = 0
 
-        msg = msg.replace('-temp='+f'{temperature:g}', '')
+    # msg = msg.strip()
 
-        if temperature <= 0.2:
-            temperature = 0.2
+    # # + reset --> reset chat
+    # if msg == '+reset':
+        # load_thread_state('chat_init')
+        # save_thread_state('chat')
+        # print(f'{bot}{separator} Chat reset.\n')
+        # continue
+    # elif msg[:5].lower() == '+gen ' or msg[:3].lower() == '+i ' or msg[:4].lower() == '+qa ' or msg[:4].lower() == '+qq ' or msg.lower() == '+++' or msg.lower() == '++':
 
-        if temperature >= 5:
-            temperature = 5
+        # # +gen YOUR PROMPT --> free single-round generation with any prompt. Requires Novel model.
+        # if msg[:5].lower() == '+gen ':
+            # new = '\n' + msg[5:].strip()
+            # state = None
+            # processed_tokens = []
+            # process_tokens(tokenizer_encode(new))
+            # save_thread_state('gen_0')
 
-    if '-top_p=' in msg:
-        top_p = float(msg.split('-top_p=')[1].split(' ')[0])
+        # # +i YOUR INSTRUCT --> free single-round generation with any instruct. Requires Raven model.
+        # elif msg[:3].lower() == '+i ':
+            # new = f'''
+# Below is an instruction that describes a task. Write a response that appropriately completes the request.
 
-        msg = msg.replace('-top_p='+f'{top_p:g}', '')
+# # Instruction:
+# {msg[3:].strip()}
 
-        if top_p <= 0:
-            top_p = 0
+# # Response:
+# '''
+            # state = None
+            # processed_tokens = []
+            # process_tokens(tokenizer_encode(new))
+            # save_thread_state('gen_0')
 
-    msg = msg.strip()
+        # # +qq YOUR QUESTION --> answer an independent question with more creativity (regardless of context).
+        # elif msg[:4].lower() == '+qq ':
+            # new = '\nQ: ' + msg[4:].strip() + '\nA:'
+            # state = None
+            # processed_tokens = []
+            # process_tokens(tokenizer_encode(new))
+            # save_thread_state('gen_0')
 
-    # + reset --> reset chat
-    if msg == '+reset':
-        load_thread_state('chat_init')
-        save_thread_state('chat')
-        print(f'{bot}{separator} Chat reset.\n')
-        continue
-    elif msg[:5].lower() == '+gen ' or msg[:3].lower() == '+i ' or msg[:4].lower() == '+qa ' or msg[:4].lower() == '+qq ' or msg.lower() == '+++' or msg.lower() == '++':
+        # # +qa YOUR QUESTION --> answer an independent question (regardless of context).
+        # elif msg[:4].lower() == '+qa ':
+            # load_thread_state('chat_init')
 
-        # +gen YOUR PROMPT --> free single-round generation with any prompt. Requires Novel model.
-        if msg[:5].lower() == '+gen ':
-            new = '\n' + msg[5:].strip()
-            state = None
-            processed_tokens = []
-            process_tokens(tokenizer_encode(new))
-            save_thread_state('gen_0')
+            # real_msg = msg[4:].strip()
+            # new = f'{user}{separator} {real_msg}\n\n{bot}{separator}'
 
-        # +i YOUR INSTRUCT --> free single-round generation with any instruct. Requires Raven model.
-        elif msg[:3].lower() == '+i ':
-            new = f'''
-Below is an instruction that describes a task. Write a response that appropriately completes the request.
+            # process_tokens(tokenizer_encode(new))
+            # save_thread_state('gen_0')
 
-# Instruction:
-{msg[3:].strip()}
+        # # +++ --> continue last free generation (only for +gen / +i)
+        # elif msg.lower() == '+++':
+            # try:
+                # load_thread_state('gen_1')
+                # save_thread_state('gen_0')
+            # except Exception as e:
+                # print(e)
+                # continue
 
-# Response:
-'''
-            state = None
-            processed_tokens = []
-            process_tokens(tokenizer_encode(new))
-            save_thread_state('gen_0')
+        # # ++ --> retry last free generation (only for +gen / +i)
+        # elif msg.lower() == '++':
+            # try:
+                # load_thread_state('gen_0')
+            # except Exception as e:
+                # print(e)
+                # continue
+        # thread = 'gen_1'
 
-        # +qq YOUR QUESTION --> answer an independent question with more creativity (regardless of context).
-        elif msg[:4].lower() == '+qq ':
-            new = '\nQ: ' + msg[4:].strip() + '\nA:'
-            state = None
-            processed_tokens = []
-            process_tokens(tokenizer_encode(new))
-            save_thread_state('gen_0')
+    # else:
+        # # + --> alternate chat reply
+        # if msg.lower() == '+':
+            # try:
+                # load_thread_state('chat_pre')
+            # except Exception as e:
+                # print(e)
+                # continue
+        # # chat with bot
+        # else:
+            # load_thread_state('chat')
+            # new = f'{user}{separator} {msg}\n\n{bot}{separator}'
+            # process_tokens(tokenizer_encode(new), new_line_logit_bias=-999999999)
+            # save_thread_state('chat_pre')
 
-        # +qa YOUR QUESTION --> answer an independent question (regardless of context).
-        elif msg[:4].lower() == '+qa ':
-            load_thread_state('chat_init')
+        # thread = 'chat'
 
-            real_msg = msg[4:].strip()
-            new = f'{user}{separator} {real_msg}\n\n{bot}{separator}'
+        # # Print bot response
+        # print(f'> {bot}{separator}', end='')
 
-            process_tokens(tokenizer_encode(new))
-            save_thread_state('gen_0')
+    # start_index: int = len(processed_tokens)
+    # accumulated_tokens: List[int] = []
+    # token_counts: Dict[int, int] = {}
 
-        # +++ --> continue last free generation (only for +gen / +i)
-        elif msg.lower() == '+++':
-            try:
-                load_thread_state('gen_1')
-                save_thread_state('gen_0')
-            except Exception as e:
-                print(e)
-                continue
+    # for i in range(MAX_GENERATION_LENGTH):
+        # for n in token_counts:
+            # logits[n] -= PRESENCE_PENALTY + token_counts[n] * FREQUENCY_PENALTY
 
-        # ++ --> retry last free generation (only for +gen / +i)
-        elif msg.lower() == '++':
-            try:
-                load_thread_state('gen_0')
-            except Exception as e:
-                print(e)
-                continue
-        thread = 'gen_1'
+        # token: int = sampling.sample_logits(logits, temperature, top_p)
 
-    else:
-        # + --> alternate chat reply
-        if msg.lower() == '+':
-            try:
-                load_thread_state('chat_pre')
-            except Exception as e:
-                print(e)
-                continue
-        # chat with bot
-        else:
-            load_thread_state('chat')
-            new = f'{user}{separator} {msg}\n\n{bot}{separator}'
-            process_tokens(tokenizer_encode(new), new_line_logit_bias=-999999999)
-            save_thread_state('chat_pre')
+        # if token == END_OF_TEXT_TOKEN:
+            # print()
+            # break
 
-        thread = 'chat'
+        # if token not in token_counts:
+            # token_counts[token] = 1
+        # else:
+            # token_counts[token] += 1
 
-        # Print bot response
-        print(f'> {bot}{separator}', end='')
+        # process_tokens([token])
 
-    start_index: int = len(processed_tokens)
-    accumulated_tokens: List[int] = []
-    token_counts: Dict[int, int] = {}
+        # # Avoid UTF-8 display issues
+        # accumulated_tokens += [token]
 
-    for i in range(MAX_GENERATION_LENGTH):
-        for n in token_counts:
-            logits[n] -= PRESENCE_PENALTY + token_counts[n] * FREQUENCY_PENALTY
+        # decoded: str = tokenizer_decode(accumulated_tokens)
 
-        token: int = sampling.sample_logits(logits, temperature, top_p)
+        # if '\uFFFD' not in decoded:
+            # print(decoded, end='', flush=True)
 
-        if token == END_OF_TEXT_TOKEN:
-            print()
-            break
+            # accumulated_tokens = []
 
-        if token not in token_counts:
-            token_counts[token] = 1
-        else:
-            token_counts[token] += 1
+        # if thread == 'chat':
+            # if '\n\n' in tokenizer_decode(processed_tokens[start_index:]):
+                # break
 
-        process_tokens([token])
+        # if i == MAX_GENERATION_LENGTH - 1:
+            # print()
 
-        # Avoid UTF-8 display issues
-        accumulated_tokens += [token]
-
-        decoded: str = tokenizer_decode(accumulated_tokens)
-
-        if '\uFFFD' not in decoded:
-            print(decoded, end='', flush=True)
-
-            accumulated_tokens = []
-
-        if thread == 'chat':
-            if '\n\n' in tokenizer_decode(processed_tokens[start_index:]):
-                break
-
-        if i == MAX_GENERATION_LENGTH - 1:
-            print()
-
-    save_thread_state(thread)
+    # save_thread_state(thread)

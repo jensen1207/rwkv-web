@@ -1,0 +1,10 @@
+^D:\PROJECT\RWKV.CPP\CMAKEFILES\A3A670841EDA5540F30D77C944565917\GENERATE.STAMP.RULE
+setlocal
+C:\Users\admin\AppData\Local\Android\Sdk\cmake\3.22.1\bin\cmake.exe -SD:/Project/rwkv.cpp -BD:/Project/rwkv.cpp --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file D:/Project/rwkv.cpp/rwkv.cpp.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

@@ -1,0 +1,27 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="D:\Project\rwkv.cpp\tests\test_ggml_basics.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="D:\Project\rwkv.cpp\tests\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Object Include="D:\Project\rwkv.cpp\ggml.dir\$(Configuration)\ggml.obj">
+      <Filter>Object Libraries</Filter>
+    </Object>
+    <Object Include="D:\Project\rwkv.cpp\ggml.dir\$(Configuration)\ggml-alloc.obj">
+      <Filter>Object Libraries</Filter>
+    </Object>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Object Libraries">
+      <UniqueIdentifier>{855D659C-68BF-30E8-BAF1-186504947801}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{7FF95746-9B5F-3274-83E6-E33339058C85}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
